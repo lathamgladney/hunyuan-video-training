@@ -1,0 +1,139 @@
+{
+  "1": {
+    "inputs": {
+      "model": "hunyuan_video_720_cfgdistill_fp8_e4m3fn.safetensors",
+      "base_precision": "bf16",
+      "quantization": "fp8_e4m3fn",
+      "load_device": "offload_device",
+      "attention_mode": "sdpa",
+      "auto_cpu_offload": false,
+      "upcast_rope": true,
+      "lora": [
+        "41",
+        0
+      ]
+    },
+    "class_type": "HyVideoModelLoader",
+    "_meta": {
+      "title": "HunyuanVideo Model Loader"
+    }
+  },
+  "3": {
+    "inputs": {
+      "width": 512,
+      "height": 320,
+      "num_frames": 85,
+      "steps": 30,
+      "embedded_guidance_scale": 6,
+      "flow_shift": 9,
+      "seed": 6,
+      "force_offload": 1,
+      "denoise_strength": 1,
+      "scheduler": "FlowMatchDiscreteScheduler",
+      "model": [
+        "1",
+        0
+      ],
+      "hyvid_embeds": [
+        "30",
+        0
+      ]
+    },
+    "class_type": "HyVideoSampler",
+    "_meta": {
+      "title": "HunyuanVideo Sampler"
+    }
+  },
+  "5": {
+    "inputs": {
+      "enable_vae_tiling": true,
+      "temporal_tiling_sample_size": 64,
+      "spatial_tile_sample_min_size": 256,
+      "auto_tile_size": true,
+      "vae": [
+        "7",
+        0
+      ],
+      "samples": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "HyVideoDecode",
+    "_meta": {
+      "title": "HunyuanVideo Decode"
+    }
+  },
+  "7": {
+    "inputs": {
+      "model_name": "hunyuan_video_vae_bf16.safetensors",
+      "precision": "bf16"
+    },
+    "class_type": "HyVideoVAELoader",
+    "_meta": {
+      "title": "HunyuanVideo VAE Loader"
+    }
+  },
+  "16": {
+    "inputs": {
+      "llm_model": "Kijai/llava-llama-3-8b-text-encoder-tokenizer",
+      "clip_model": "openai/clip-vit-large-patch14",
+      "precision": "fp16",
+      "apply_final_norm": false,
+      "hidden_state_skip_layer": 2,
+      "quantization": "disabled",
+      "load_device": "offload_device"
+    },
+    "class_type": "DownloadAndLoadHyVideoTextEncoder",
+    "_meta": {
+      "title": "(Down)Load HunyuanVideo TextEncoder"
+    }
+  },
+  "30": {
+    "inputs": {
+      "prompt": "Stop motion, a glass bottle is placed on a wooden table, one hand holds it, the other hand holds a knife cutting the bottle into small pieces, the cut is very clean without any shards or cracks. Close-up angle, stop motion.",
+      "force_offload": true,
+      "prompt_template": "video",
+      "text_encoders": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "HyVideoTextEncode",
+    "_meta": {
+      "title": "HunyuanVideo TextEncode"
+    }
+  },
+  "34": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "HunyuanVideo",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
+    }
+  },
+  "41": {
+    "inputs": {
+      "lora": "20250210_05-19-13/epoch85/adapter_model.safetensors",
+      "strength": 0.8500000000000001
+    },
+    "class_type": "HyVideoLoraSelect",
+    "_meta": {
+      "title": "HunyuanVideo Lora Select"
+    }
+  }
+}
