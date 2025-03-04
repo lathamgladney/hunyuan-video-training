@@ -1,0 +1,42 @@
+output_dir = "/root/diffusion-pipe/hunyuan-video-lora"
+dataset = "/root/config/dataset.toml"
+epochs = 5
+micro_batch_size_per_gpu = 8
+pipeline_stages = 1
+gradient_accumulation_steps = 8
+gradient_clipping = 1
+warmup_steps = 100
+eval_every_n_epochs = 5
+eval_before_first_step = true
+eval_micro_batch_size_per_gpu = 1
+eval_gradient_accumulation_steps = 1
+save_every_n_epochs = 1
+activation_checkpointing = true
+partition_method = "parameters"
+save_dtype = "bfloat16"
+caching_batch_size = 4
+steps_per_print = 1
+video_clip_mode = "single_middle"
+checkpoint_every_n_epochs = 1
+
+[model]
+type = "hunyuan-video"
+dtype = "bfloat16"
+transformer_dtype = "float8"
+timestep_sample_method = "logit_normal"
+transformer_path = "/root/diffusion-pipe/ckpts/hunyuan-video-t2v-720p/transformers/hunyuan_video_720_cfgdistill_bf16.safetensors"
+vae_path = "/root/diffusion-pipe/ckpts/hunyuan-video-t2v-720p/vae/hunyuan_video_vae_fp32.safetensors"
+clip_path = "/root/diffusion-pipe/ckpts/text_encoder_2/clip-vit-large-patch14"
+llm_path = "/root/diffusion-pipe/ckpts/text_encoder/llava-llama-3-8b-text-encoder-tokenizer"
+
+[adapter]
+type = "lora"
+rank = 32
+dtype = "bfloat16"
+
+[optimizer]
+type = "adamw_optimi"
+lr = 0.0001
+betas = [ 0.9, 0.99,]
+weight_decay = 0.01
+eps = 1e-8

@@ -1,0 +1,103 @@
+[core]
+gpu_type = "H100"
+gpu_count = 1
+timeout_hours = 3
+gpu_type_test = "A100-40GB"
+gpu_count_test = 1
+timeout_hours_test = 1
+[[core.volumes]]
+name = "hunyuan-training-results"
+path = "/root/diffusion-pipe/hunyuan-video-lora"
+
+[[core.volumes]]
+name = "hf-cache"
+path = "/root/.cache/huggingface"
+
+[[core.volumes]]
+name = "comfy-output"
+path = "/root/comfy/ComfyUI/output"
+
+[training]
+resume = false
+resume_folder = ""
+dataset_dir = ""
+epochs = 5
+micro_batch_size = 8
+gradient_accum_steps = 8
+warmup_steps = 100
+learning_rate = 0.0001
+weight_decay = 0.01
+lora_rank = 32
+lora_dtype = "bfloat16"
+save_every_n_epochs = 1
+checkpoint_mode = "epochs"
+checkpoint_frequency = 1
+pipeline_stages = 1
+gradient_clipping = 1
+activation_checkpointing = true
+eval_every_n_epochs = 5
+caching_batch_size = 4
+steps_per_print = 1
+
+[inference]
+api_endpoint = ""
+workflow_path = "config/workflow_api.json"
+test_enabled = true
+test_strength = 0
+test_height = 320
+test_width = 512
+test_frames = 85
+test_steps = 30
+test_folder = ""
+test_mode = "latest"
+test_epochs = []
+test_latest_n = 1
+test_prompts = []
+
+[hf]
+auto_upload = false
+private_repo = true
+upload_test_outputs = true
+upload_tensorboard = false
+force_redownload = false
+skip_existing = true
+upload_endpoint = ""
+download_endpoint = ""
+repo_upload = ""
+
+[training.dataset]
+resolutions = [512]
+enable_ar_bucket = true
+min_ar = 0.5
+max_ar = 2
+num_ar_buckets = 10
+frame_buckets = [1, 1]
+num_repeats = 10
+
+[models.training]
+transformer = "https://huggingface.co/Kijai/HunyuanVideo_comfy/blob/main/hunyuan_video_720_cfgdistill_bf16.safetensors"
+vae = "https://huggingface.co/Kijai/HunyuanVideo_comfy/blob/main/hunyuan_video_vae_fp32.safetensors"
+clip = "https://huggingface.co/openai/clip-vit-large-patch14/tree/main"
+llm = "https://huggingface.co/Kijai/llava-llama-3-8b-text-encoder-tokenizer/tree/main"
+
+[models.inference]
+nodes = [
+    "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite",
+    "https://github.com/kijai/ComfyUI-HunyuanVideoWrapper",
+]
+[[models.inference.specs]]
+link = "https://huggingface.co/Kijai/HunyuanVideo_comfy/blob/main/hunyuan_video_vae_bf16.safetensors"
+filename = "hunyuan_video_vae_bf16.safetensors"
+type = "vae"
+
+[[models.inference.specs]]
+link = "https://huggingface.co/Kijai/HunyuanVideo_comfy/blob/main/hunyuan_video_720_cfgdistill_fp8_e4m3fn.safetensors"
+type = "unet"
+
+[[models.inference.specs]]
+link = "https://huggingface.co/openai/clip-vit-large-patch14/tree/main"
+type = "clip"
+
+[[models.inference.specs]]
+link = "https://huggingface.co/Kijai/llava-llama-3-8b-text-encoder-tokenizer/tree/main"
+type = "LLM"

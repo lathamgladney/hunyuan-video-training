@@ -1,0 +1,23 @@
+[nodes]
+nodes = [
+  "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite",
+  "https://github.com/kijai/ComfyUI-HunyuanVideoWrapper",
+]
+
+[[models]]
+link = "https://huggingface.co/Kijai/HunyuanVideo_comfy/blob/main/hunyuan_video_vae_bf16.safetensors"
+filename = "hunyuan_video_vae_bf16.safetensors"
+type = "vae"
+
+[[models]]
+link = "https://huggingface.co/Kijai/HunyuanVideo_comfy/blob/main/hunyuan_video_720_cfgdistill_fp8_e4m3fn.safetensors"
+type = "unet"
+
+[[models]]
+link = "https://huggingface.co/openai/clip-vit-large-patch14/tree/main"
+type = "clip"
+
+[[models]]
+link = "https://huggingface.co/Kijai/llava-llama-3-8b-text-encoder-tokenizer/tree/main"
+type = "LLM"
+
