@@ -8,7 +8,7 @@ from _utils.common_utils import (
     get_api_endpoint, get_base_folder_name, get_folders_with_epochs,
     get_folders_with_steps, get_formatted_folders, get_model_local_path,
     get_test_outputs, get_training_folders, get_valid_num_frames,
-    upload_config_files, upload_dataset, generate_with_comfy_api, FolderProcessor, get_tensorboard_folders
+    upload_config_files, upload_dataset, generate_with_comfy_api, FolderProcessor, get_tensorboard_folders, get_epochs_to_test
 )
 from _utils.config_normalizer import ConfigNormalizer
 from _utils.constants import Config, ModelTypes, CheckpointModes, TestModes, Paths, Volumes, APP_NAME
@@ -31,7 +31,7 @@ if not logging.getLogger().hasHandlers():
 logger = logging.getLogger(__name__)
 
 config_normalizer = ConfigNormalizer()
-TEST_EXECUTOR = ThreadPoolExecutor(max_workers=3)
+TEST_EXECUTOR = ThreadPoolExecutor(max_workers=1)
 TEST_FUTURES = []
 TEST_COUNTER = 0
 
@@ -481,19 +481,28 @@ def save_config_and_start_test_lora(settings: ConfigSettings) -> str:
     epoch_info = processor._process_single_folder_epochs(base_folder)
     if not epoch_info or not epoch_info.has_epochs:
         return f"⚠️ No epochs found in folder {base_folder}"
-    latest_epoch = epoch_info.latest_epoch
     
-    if settings.test_epoch_mode == "Specific Epochs" and settings.test_specific_epochs:
-        epochs_to_test = [int(e.strip()) for e in settings.test_specific_epochs.split(",")]
-    elif settings.test_epoch_mode == "Latest N Epochs" and settings.test_latest_n_epochs:
-        epochs_to_test = [latest_epoch - i for i in range(int(settings.test_latest_n_epochs))]
+    # Get all available epochs and create checkpoints list
+    checkpoints = [(base_folder, e) for e in epoch_info.epoch_list]
+    
+    # Prepare epoch config based on test mode
+    if settings.test_epoch_mode == "specific" and settings.test_specific_epochs:
+        epoch_config = [int(e.strip()) for e in settings.test_specific_epochs.split(",")]
+    elif settings.test_epoch_mode == "latest_n" and settings.test_latest_n_epochs:
+        # Use negative indices to select last N epochs
+        epoch_config = [-i for i in range(1, int(settings.test_latest_n_epochs)+1)]
     else:
-        epochs_to_test = [latest_epoch]
+        epoch_config = []  # Will default to latest
+    
+    # Get actual epochs to test using common utility function
+    selected = get_epochs_to_test(checkpoints, epoch_config)
+    epochs_to_test = [epoch for _, epoch in selected]
     
     prompts = [p.strip() for p in settings.test_prompts.split("\n")] if settings.test_prompts else ["A beautiful video, best quality"]
     
     file_ext = "png" if settings.test_frames == 1 else "mp4"
     for epoch in epochs_to_test:
+        logger.info(f"Testing epoch {epoch}")
         for prompt_idx, prompt in enumerate(prompts):
             TEST_COUNTER += 1
             timestamp = datetime.now().strftime("%Y%m%d_%H-%M-%S")

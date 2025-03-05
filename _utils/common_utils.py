@@ -357,17 +357,9 @@ def find_lora_checkpoints(output_dir: str) -> List[Tuple[str, int]]:
     return sorted(checkpoints, key=lambda x: x[1])
 
 def get_epochs_to_test(checkpoints: List[Tuple[str, int]], epoch_config: List[int]) -> List[Tuple[str, int]]:
-    """Get list of epochs to test based on configuration
-    
-    Args:
-        checkpoints: List of (checkpoint_path, epoch_number) tuples
-        epoch_config: List of epoch numbers to test. Negative numbers indicate counting from the end
-        
-    Returns:
-        List of selected checkpoints sorted by epoch number
-    """
+    """Get list of epochs to test based on configuration"""
     if not epoch_config:  # Empty list means test latest epoch
-        return checkpoints[-1:]
+        return checkpoints[-1:] if checkpoints else []
         
     result = []
     total_epochs = len(checkpoints)
@@ -375,14 +367,16 @@ def get_epochs_to_test(checkpoints: List[Tuple[str, int]], epoch_config: List[in
     for epoch in epoch_config:
         if epoch > 0:  # Positive number means specific epoch
             matches = [(path, num) for path, num in checkpoints if num == epoch]
-            if matches:
-                result.extend(matches)
+            result.extend(matches)
         else:  # Negative number means count from end
-            index = total_epochs + epoch  # -1 means last, -2 means second last, etc.
+            # Handle negative indices correctly
+            index = total_epochs + epoch
             if 0 <= index < total_epochs:
                 result.append(checkpoints[index])
                 
-    return sorted(result, key=lambda x: x[1])  # Sort by epoch number
+    # Remove duplicates and sort
+    unique_results = list({x[1]: x for x in result}.values())
+    return sorted(unique_results, key=lambda x: x[1])
 
 def get_valid_num_frames(num_frames: int) -> int:
     """Convert number of frames to valid format (4k + 1)
