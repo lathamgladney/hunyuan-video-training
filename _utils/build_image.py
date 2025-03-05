@@ -101,6 +101,7 @@ def _download_training_models() -> bool:
 def _download_inference_models() -> bool:
     """Download models for inference"""
     try:
+        logger.info("=== Starting _download_inference_models ===")
         logger.info("Loading configuration...")
         config = toml.load(f"/root/{Config.Files.COMFY}")
         
@@ -187,7 +188,8 @@ hunyuan_image = (add_common_files(hunyuan_image)
         volumes={
             "/root/.cache/huggingface": modal.Volume.from_name(Volumes.CACHE, create_if_missing=True)
         },
-        secrets=[modal.Secret.from_name("huggingface-token")]
+        secrets=[modal.Secret.from_name("huggingface-token")],
+        force_build=True
     )
 )
 
@@ -233,7 +235,8 @@ comfy_image = comfy_image.run_function(
     volumes={
         "/root/.cache/huggingface": modal.Volume.from_name(Volumes.CACHE, create_if_missing=True)
     },
-    secrets=[modal.Secret.from_name("huggingface-token")]
+    secrets=[modal.Secret.from_name("huggingface-token")],
+    force_build=True
 )
 
 comfy_image = comfy_image.run_commands([

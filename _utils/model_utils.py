@@ -130,7 +130,7 @@ def download_and_link_training_model(
 ) -> bool:
     """Download training model and create appropriate symlink"""
     try:
-        logger.info(f"Downloading {model_type} model from {model_url}")
+        logger.info(f"Downloading training model {model_type} from {model_url}")
         enum_model_type = ModelTypes(model_type)
         url_info = parse_hf_url(model_url)
         
@@ -173,8 +173,8 @@ def download_and_link_inference_model(
 ) -> bool:
     """Download inference model and create appropriate symlink"""
     try:
-        enum_model_type = ModelTypes(model_type)
         logger.info(f"Downloading inference model {model_type} from {model_url}")
+        enum_model_type = ModelTypes(model_type)
         url_info = parse_hf_url(model_url)
         
         # Download model
