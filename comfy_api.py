@@ -32,10 +32,10 @@ logger = logging.getLogger(__name__)
     timeout=2700, # 45 minutes, because of the video generation is slow and if we have multiple requests, it will timeout
     gpu=f"{cfg.core.gpu_type_test}:{cfg.core.gpu_count_test}",
     volumes={
-        Paths.CACHE.base: cache_volume,
-        Paths.INFERENCE.output: comfy_output_vol,
-        Paths.TRAINING.output: output_volume,
-        Paths.TRAINING.config: config_volume
+        str(Paths.CACHE.base): cache_volume,
+        str(Paths.INFERENCE.output): comfy_output_vol,
+        str(Paths.TRAINING.output): output_volume,
+        str(Paths.TRAINING.config): config_volume
     }
 )
 class ComfyAPI:
@@ -83,6 +83,7 @@ class ComfyAPI:
         
         timestamp = time.strftime("%Y%m%d_%H-%M-%S")
         output_nodes[0]["inputs"]["filename_prefix"] = f"epoch{epoch_num:03d}_prompt01_{timestamp}_api"
+        logger.info(f"Updated workflow with filename_prefix: {output_nodes[0]['inputs']['filename_prefix']}")
         
         return workflow
 
@@ -104,9 +105,11 @@ class ComfyAPI:
         dest_path = os.path.join(loras_base_dir, lora_path)
         if not os.path.exists(dest_path):
             os.symlink(full_lora_path, dest_path)
+            logger.info(f"Created symlink: {dest_path}")
         elif os.path.realpath(dest_path) != os.path.realpath(full_lora_path):
             os.remove(dest_path)
             os.symlink(full_lora_path, dest_path)
+            logger.info(f"Updated symlink: {dest_path}")
         
         params["lora"] = lora_path
         updated_workflow = self._update_workflow(params, client_id)

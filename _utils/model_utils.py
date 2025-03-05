@@ -98,7 +98,7 @@ def download_hf_model(url_info: Dict, cache_path: str) -> Tuple[str, bool]:
             repo_id=url_info["repo_id"],
             filename=url_info["file_path"],
             cache_dir=Paths.CACHE.base,
-            token=modal.Secret.from_name("huggingface-token"),
+            token=os.environ.get("HF_TOKEN"),
             revision=url_info["branch"]
         )
         return file_path, True
@@ -106,7 +106,7 @@ def download_hf_model(url_info: Dict, cache_path: str) -> Tuple[str, bool]:
         snapshot_path = snapshot_download(
             repo_id=url_info["repo_id"],
             local_dir=cache_path,
-            token=modal.Secret.from_name("huggingface-token"),
+            token=os.environ.get("HF_TOKEN"),
             revision=url_info["branch"]
         )
         

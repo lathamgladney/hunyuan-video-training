@@ -26,10 +26,10 @@ logger = logging.getLogger(__name__)
     timeout=900,
     gpu=f"{cfg.core.gpu_type_test}:{cfg.core.gpu_count_test}",
     volumes={
-        Paths.CACHE.base: cache_volume,
-        Paths.INFERENCE.output: comfy_output_vol,
-        Paths.TRAINING.output: output_volume,
-        Paths.TRAINING.config: config_volume
+        str(Paths.CACHE.base): cache_volume,
+        str(Paths.INFERENCE.output): comfy_output_vol,
+        str(Paths.TRAINING.output): output_volume,
+        str(Paths.TRAINING.config): config_volume
     }
 )
 @modal.web_server(8000, startup_timeout=300)

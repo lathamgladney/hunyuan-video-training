@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
         str(Paths.TRAINING.output): output_volume,
         str(Paths.CACHE.base): cache_volume,
         "/root/config": config_volume,
-        f"/root/{cfg.training.dataset_dir}": data_volume,  # Use dataset directory from config
+        "/root/data": data_volume,  # Mount data volume to fixed /root/data path
         "/root/.nv": nv_cache_volume,
         "/root/.triton": triton_cache_volume,
         "/root/.inductor-cache": inductor_cache_volume,
@@ -92,7 +92,7 @@ def remote_train():
     backup_training_files(
         backup_dir=backup_dir,
         config_src=Paths.TRAINING.config,
-        dataset_src=f"{Paths.ROOT}/{cfg.training.dataset_dir}",
+        dataset_src="/root/data",
         dataset_name=cfg.training.dataset_dir,
         is_resume=cfg.training.resume
     )

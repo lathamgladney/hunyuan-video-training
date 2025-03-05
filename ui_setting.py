@@ -292,7 +292,7 @@ def update_configs(settings: ConfigSettings) -> str:
             "max_ar": settings.max_ar,
             "num_ar_buckets": settings.num_ar_buckets,
             "frame_buckets": [settings.frame_buckets_min, settings.frame_buckets_max],
-            "directory": [{"path": f"/root/{settings.dataset_dir}", "num_repeats": settings.num_repeats}]
+            "directory": [{"path": "/root/data", "num_repeats": settings.num_repeats}]
         }
 
         with open(Config.Files.DATASET, "w", encoding="utf-8") as f:

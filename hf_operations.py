@@ -50,7 +50,7 @@ def upload_to_huggingface(path_or_fileobj: str, path_in_repo: str, repo_id: str,
 
 @app.function(
     image=hf_image,
-    volumes={Paths.TRAINING.output: output_volume},
+    volumes={str(Paths.TRAINING.output): output_volume},
     timeout=60*60*3,
     secrets=[modal.Secret.from_name("huggingface-token")]
 )
@@ -131,7 +131,7 @@ def upload(repo: str, private: bool, include_tests: bool, target: str):
 
 @app.function(
     image=hf_image,
-    volumes={Paths.TRAINING.output: output_volume},
+    volumes={str(Paths.TRAINING.output): output_volume},
     timeout=60*60*3,
     secrets=[modal.Secret.from_name("huggingface-token")]
 )
