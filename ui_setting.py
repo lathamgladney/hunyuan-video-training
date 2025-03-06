@@ -457,11 +457,99 @@ def update_training_folders():
 def update_results(folder: str = None, force_reload: bool = False):
     if not folder:
         return None
+    
     actual_folder = folder.split(" (")[0]
-    files = get_test_outputs(actual_folder, force_reload=force_reload)
-    if not files:
+    
+    # Get results from Modal Volume (automatic tests)
+    volume_files = get_test_outputs(actual_folder, force_reload=force_reload)
+    
+    # Get results from local cache
+    local_cache_dir = os.path.join("cache", "test_outputs", actual_folder)
+    local_files = []
+    
+    if os.path.exists(local_cache_dir):
+        logger.info(f"Scanning local cache directory: {local_cache_dir}")
+        for file in os.listdir(local_cache_dir):
+            if file.lower().endswith(('.mp4', '.png', '.jpg', '.jpeg', '.webp')):
+                file_path = os.path.join(local_cache_dir, file)
+                try:
+                    # Process both manual and automatic test files
+                    match = re.match(
+                        r'epoch(\d+)_prompt(\d+)_(\d{8}_\d{2}-\d{2}-\d{2})_comfy_(manual|auto)', 
+                        file
+                    )
+                    if match:
+                        epoch = int(match.group(1))
+                        prompt_num = int(match.group(2))
+                        timestamp_str = match.group(3)
+                        timestamp = datetime.strptime(timestamp_str, '%Y%m%d_%H-%M-%S')
+                        test_type = match.group(4)
+                        
+                        # Add all local files to the list, both manual and auto
+                        local_files.append({
+                            'path': file_path,
+                            'epoch': epoch,
+                            'prompt_num': prompt_num,
+                            'timestamp': timestamp,
+                            'test_type': test_type,
+                            'filename': file
+                        })
+                        logger.info(f"Added local file: {file}, type: {test_type}")
+                except Exception as e:
+                    logger.error(f"Error parsing file {file}: {str(e)}")
+    
+    logger.info(f"Found {len(volume_files)} files from volume and {len(local_files)} files from local cache")
+    
+    # Create dictionary to track processed files by epoch and prompt
+    processed_files = {}
+    
+    # Combine results
+    all_files = []
+    
+    # Prioritize files from volume first (usually auto tests)
+    for file in volume_files:
+        key = (file['epoch'], file['prompt_num'])
+        processed_files[key] = True
+        
+        # Add test_type information if not present
+        if 'test_type' not in file:
+            if 'filename' in file:
+                match = re.search(r'_comfy_(manual|auto)', file['filename'])
+                if match:
+                    file['test_type'] = match.group(1)
+                else:
+                    file['test_type'] = 'auto'
+            else:
+                file['test_type'] = 'auto'
+        
+        all_files.append(file)
+    
+    # Add local files that aren't in the volume
+    for file in local_files:
+        key = (file['epoch'], file['prompt_num'])
+        
+        # Check if there's already a file with this epoch and prompt
+        # If manual and not present, or if already present but with an older timestamp, add it
+        if key not in processed_files:
+            all_files.append(file)
+        elif file['test_type'] == 'manual':  # Prioritize manual test display
+            # Find and replace old file
+            for i, existing_file in enumerate(all_files):
+                if (existing_file['epoch'], existing_file['prompt_num']) == key:
+                    all_files[i] = file
+                    break
+    
+    # Sort by epoch and prompt number
+    sorted_files = sorted(all_files, key=lambda x: (x['epoch'], x['prompt_num']))
+    
+    if not sorted_files:
+        logger.warning("No result files found to display")
         return None
-    return [(file['path'], f"Epoch {file['epoch']:03d} - Prompt {file['prompt_num']:02d} - \n{file['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}") for file in files]
+        
+    logger.info(f"Displaying a total of {len(sorted_files)} result files")
+    return [(file['path'], f"Epoch {file['epoch']:03d} - Prompt {file['prompt_num']:02d} - \n{file['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}" + 
+            (" (Manual)" if file.get('test_type') == 'manual' else "")) 
+            for file in sorted_files]
 
 def update_api_endpoint():
     endpoint = get_api_endpoint("comfy")
