@@ -473,7 +473,7 @@ def get_api_endpoint(endpoint_type: str = "comfy") -> str:
         return f"Error getting API endpoint: {str(e)}"
 
 def get_dataset_name(folder: str) -> str:
-    """Get dataset name from dataset.toml in backup/config_orig folder
+    """Get dataset name from dataset_dir in modal.toml in backup/config_orig folder
     
     Args:
         folder: Training folder name
@@ -484,30 +484,29 @@ def get_dataset_name(folder: str) -> str:
     try:
         volume = modal.Volume.from_name(Volumes.TRAINING)
         
-        # Check if backup/config_orig/dataset.toml exists
-        config_path = f"{folder}/backup/config_orig/dataset.toml"
+        # Check if backup/config_orig/modal.toml exists
+        config_path = f"{folder}/backup/config_orig/modal.toml"
         
         # List directory to check file existence
         dir_path = os.path.dirname(config_path)
         entries = volume.listdir(dir_path)
         
-        if not any(entry.path.endswith("dataset.toml") for entry in entries):
+        if not any(entry.path.endswith("modal.toml") for entry in entries):
             return "[no dataset info]"
             
-        # Read and parse dataset.toml
+        # Read and parse modal.toml
         content = b"".join(volume.read_file(config_path))
         config = toml.loads(content.decode('utf-8'))
         
-        # Extract dataset name from directory path
-        if "directory" in config and len(config["directory"]) > 0:
-            path = config["directory"][0].get("path", "")
-            dataset = path.split("/")[-1]  # Get last part of path
+        # Extract dataset name from training.dataset_dir
+        if "training" in config and "dataset_dir" in config["training"]:
+            dataset = config["training"]["dataset_dir"]
             return f"[{dataset}]" if dataset else "[no dataset info]"
             
         return "[no dataset info]"
         
-    except Exception:
-        logger.warning(f"Not found dataset info for {folder}")
+    except Exception as e:
+        logger.warning(f"Failed to get dataset info for {folder}: {str(e)}")
         return "[no dataset info]"
 
 def get_epoch_info(folder: str) -> Dict[str, Any]:
