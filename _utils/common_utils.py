@@ -1075,8 +1075,22 @@ def list_training_folders() -> List[str]:
         logger.error(f"Error listing training folders: {str(e)}")
         return []
 
-def get_tensorboard_folders() -> List[Tuple[str, str]]:
-    """Get list of training folders with log files and their latest log"""
+def get_tensorboard_folders(force_reload: bool = False) -> List[Tuple[str, str, List[str]]]:
+    """Get list of training folders with log files and their latest log
+    
+    Args:
+        force_reload: If True, ignore cache and reload from volume
+        
+    Returns:
+        List[Tuple[str, str, List[str]]]: List of (display_name, folder_name, log_files) tuples
+    """
+    # Check cache first if not forcing reload
+    cache_key = "tensorboard_folders"
+    if not force_reload:
+        with training_folders_cache_lock:
+            if cache_key in training_folders_cache:
+                return training_folders_cache[cache_key]
+    
     try:
         volume = modal.Volume.from_name(Volumes.TRAINING)
         entries = volume.listdir("/", recursive=False)
@@ -1092,7 +1106,7 @@ def get_tensorboard_folders() -> List[Tuple[str, str]]:
                 log_files = [e.path for e in all_entries if "events.out.tfevents" in e.path]
                 
                 if log_files:
-                    # Lấy file log mới nhất
+                    # Get the latest log file
                     log_files.sort(reverse=True)
                     latest_log = log_files[0].split("/")[-1]
                     dataset_name = get_dataset_name(folder_name)
@@ -1106,8 +1120,13 @@ def get_tensorboard_folders() -> List[Tuple[str, str]]:
                 logger.warning(f"Skipped {folder_name}: {str(e)}")
                 continue
                 
-        # Sắp xếp theo thời gian tạo folder (giả định folder mới nhất là đầu tiên)
+        # Sort by folder name
         folder_data.sort(key=lambda x: x[1], reverse=True)
+        
+        # Update cache
+        with training_folders_cache_lock:
+            training_folders_cache[cache_key] = folder_data
+            
         return folder_data
         
     except Exception as e:

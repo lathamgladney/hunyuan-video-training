@@ -24,6 +24,8 @@ import logging
 from _utils.logging_config import configure_logging
 import re
 import subprocess
+import time
+import psutil
 
 if not logging.getLogger().hasHandlers():
     configure_logging()
@@ -1477,126 +1479,105 @@ def create_config_interface():
                 tensorboard_logs_cache = {}
                 tensorboard_logs_cache_lock = threading.RLock()  # Changed to RLock
 
-                def download_tensorboard_logs(log_path: str) -> str:
-                    """Download TensorBoard log files from Modal Volume to local folder
+                def download_tensorboard_logs(log_path: str, force_download: bool = False) -> str:
+                    """Download TensorBoard log files from Modal Volume
                     
                     Args:
-                        log_path: Path to log file in Modal Volume
+                        log_path: Path to log file on Modal Volume
+                        force_download: If True, always download file even if unchanged
                         
                     Returns:
-                        str: Local path where logs were downloaded, or None if error
+                        str: Path to local log directory
                     """
                     try:
-                        # Get log directory structure
                         log_dir = os.path.dirname(log_path)
                         local_log_dir = Path("tensorboard_logs") / log_dir
-                        
-                        # Create directory if it doesn't exist
                         os.makedirs(local_log_dir, exist_ok=True)
                         
-                        # Get all log files in the same directory
                         volume = modal.Volume.from_name(Volumes.TRAINING)
-                        try:
-                            entries = volume.listdir(log_dir, recursive=False)
-                            log_files = [e.path for e in entries if "events.out.tfevents" in e.path]
-                            logger.debug(f"Found {len(log_files)} log files to download")
-                        except Exception as e:
-                            logger.error(f"Cannot list log directory {log_dir}: {str(e)}")
-                            log_files = [log_path]  # If error, only download selected file
+                        entries = volume.listdir(log_dir, recursive=False)
                         
-                        # Download and save each log file (only if it doesn't exist)
+                        # Get all log files in the same directory
+                        remote_files = {e.path: e for e in entries if "events.out.tfevents" in e.path}
+                        
                         files_downloaded = 0
-                        for log_file in log_files:
-                            log_filename = os.path.basename(log_file)
-                            local_log_path = local_log_dir / log_filename
+                        for remote_path, entry in remote_files.items():
+                            local_path = local_log_dir / os.path.basename(remote_path)
                             
-                            # Skip if file already exists (to avoid unnecessary downloads)
-                            if os.path.exists(local_log_path):
-                                logger.debug(f"File {local_log_path} already exists, skipping")
-                                continue
-                            
-                            # Download log file from Modal Volume
-                            try:
-                                log_content = volume.read_file(log_file)
+                            # Check file size and modification time
+                            should_download = force_download
+                            if local_path.exists():
+                                local_stat = os.stat(local_path)
+                                if not force_download and (local_stat.st_size == entry.size and 
+                                    local_stat.st_mtime >= entry.mtime):
+                                    logger.debug(f"Skipping unchanged file: {remote_path}")
+                                    logger.debug(f"  Local: size={local_stat.st_size}, mtime={local_stat.st_mtime}")
+                                    logger.debug(f"  Remote: size={entry.size}, mtime={entry.mtime}")
+                                    continue  # Skip if file is unchanged and not force download
+                                else:
+                                    should_download = True
+                                    if local_stat.st_size != entry.size:
+                                        logger.info(f"File size changed: {remote_path}")
+                                        logger.info(f"  Local: {local_stat.st_size}, Remote: {entry.size}")
+                                    if local_stat.st_mtime < entry.mtime:
+                                        logger.info(f"File time changed: {remote_path}")
+                                        logger.info(f"  Local: {local_stat.st_mtime}, Remote: {entry.mtime}")
+                            else:
+                                should_download = True
+                                logger.info(f"New file to download: {remote_path}")
                                 
-                                # Save log file to local directory
-                                with open(local_log_path, "wb") as f:
-                                    f.write(b"".join(log_content))
+                            # Download new file if it has changed or force download
+                            if should_download:
+                                try:
+                                    logger.info(f"Downloading file: {remote_path}")
+                                    log_content = volume.read_file(remote_path)
+                                    with open(local_path, "wb") as f:
+                                        f.write(b"".join(log_content))
+                                    os.utime(local_path, (entry.mtime, entry.mtime))
+                                    files_downloaded += 1
+                                    logger.info(f"Successfully downloaded: {remote_path}")
+                                except Exception as e:
+                                    logger.error(f"Error downloading {remote_path}: {str(e)}")
+
+                        # Delete old cache if needed
+                        with tensorboard_logs_cache_lock:
+                            if log_path in tensorboard_logs_cache:
+                                del tensorboard_logs_cache[log_path]
                                 
-                                files_downloaded += 1
-                                logger.debug(f"Downloaded log file to {local_log_path}")
-                            except Exception as e:
-                                logger.error(f"Cannot download file {log_file}: {str(e)}")
-                        
-                        # Verify log files were downloaded successfully
-                        downloaded_files = list(Path(local_log_dir).glob("events.out.tfevents*"))
-                        logger.debug(f"Downloaded {files_downloaded} new log files. Directory now contains {len(downloaded_files)} log files.")
-                            
-                        # Convert to absolute path to avoid any path resolution issues
-                        absolute_log_dir = os.path.abspath(os.path.normpath(local_log_dir))
-                        logger.debug(f"Using absolute log directory path: {absolute_log_dir}")
-                        
-                        if not os.access(absolute_log_dir, os.R_OK):
-                            logger.error(f"Permission denied for log directory: {absolute_log_dir}")
-                        
-                        # Thêm verify nội dung file
-                        if downloaded_files:
-                            first_file = downloaded_files[0]
-                            if first_file.stat().st_size == 0:
-                                logger.error("Downloaded empty log file")
-                                return None
-                        
-                        return absolute_log_dir
+                        logger.info(f"Downloaded {files_downloaded} files to {local_log_dir}")
+                        return os.path.abspath(local_log_dir)
                     except Exception as e:
-                        logger.error(f"Failed to download logs: {str(e)}", exc_info=True)
+                        logger.error(f"Failed to download logs: {str(e)}")
                         return None
 
                 def update_tb_folders(force_reload=False):
-                    """Update TensorBoard folders dropdown with cached data
-                    
-                    Args:
-                        force_reload: If True, ignore cache and reload from volume
+                    """Update folder list with cache-aware logic"""
+                    try:
+                        # Always force reload when user clicks refresh
+                        folders = get_tensorboard_folders(force_reload=force_reload)
+                        tensorboard_folders_cache["folders"] = folders
                         
-                    Returns:
-                        List with updated Gradio components
-                    """
-                    # Use cached folders if available and not forced to reload
-                    if not force_reload and "folders" in tensorboard_folders_cache:
-                        folders = tensorboard_folders_cache["folders"]
-                        if folders:
-                            folder_choices = [(f[0], f[1]) for f in folders]
-                            latest_folder = folders[0][1]
-                            latest_logs = folders[0][2]
-                            log_choices = [os.path.basename(p) for p in latest_logs]
-                            return [
-                                gr.update(choices=folder_choices, value=latest_folder),
-                                gr.update(choices=log_choices, value=log_choices[0], visible=len(log_choices) > 1),
-                                latest_logs[0]
-                            ]
+                        if not folders:
+                            return [gr.update(choices=[], value=None), gr.update(visible=False), None]
                             
-                    # Get fresh data from volume
-                    folders = get_tensorboard_folders()
-                    
-                    # Cache the result
-                    tensorboard_folders_cache["folders"] = folders
-                    
-                    if not folders:
+                        # Update timestamp to avoid browser cache
+                        timestamp = int(time.time())
+                        folder_choices = [(f"{f[0]}?t={timestamp}", f[1]) for f in folders]
+                        latest_folder = folders[0][1]
+                        latest_logs = folders[0][2]
+                        
                         return [
-                            gr.update(choices=[], value=None),
-                            gr.update(visible=False),
-                            None
+                            gr.update(choices=folder_choices, value=latest_folder),
+                            gr.update(choices=[os.path.basename(p) for p in latest_logs], 
+                                     value=os.path.basename(latest_logs[0]) if latest_logs else None,
+                                     visible=len(latest_logs) > 1),
+                            latest_logs[0] if latest_logs else None
                         ]
-                    folder_choices = [(f[0], f[1]) for f in folders]
-                    latest_folder = folders[0][1]
-                    latest_logs = folders[0][2]
-                    log_choices = [os.path.basename(p) for p in latest_logs]
-                    return [
-                        gr.update(choices=folder_choices, value=latest_folder),
-                        gr.update(choices=log_choices, value=log_choices[0], visible=len(log_choices) > 1),
-                        latest_logs[0]
-                    ]
+                    except Exception as e:
+                        logger.error(f"Error updating folders: {str(e)}")
+                        return [gr.update(choices=[], value=None), gr.update(visible=False), None]
 
-                def start_tensorboard(log_path: str) -> str:                    
+                def start_tensorboard(log_path: str, force_reload: bool = False) -> str:                    
                     try:
                         # Check if TensorBoard is installed
                         try:
@@ -1617,11 +1598,12 @@ def create_config_interface():
                         # Check cache for this log path
                         with tensorboard_logs_cache_lock:
                             cached_dir = tensorboard_logs_cache.get(log_path)
-                            if cached_dir and os.path.exists(cached_dir):
+                            if not force_reload and cached_dir and os.path.exists(cached_dir):
                                 logger.debug(f"Using cached directory: {cached_dir}")
                                 local_log_dir = cached_dir
                             else:
-                                local_log_dir = download_tensorboard_logs(log_path)
+                                # Force download when force_reload=True
+                                local_log_dir = download_tensorboard_logs(log_path, force_download=force_reload)
                                 if local_log_dir and os.path.exists(local_log_dir):
                                     logger.debug(f"Caching new directory: {local_log_dir}")
                                     tensorboard_logs_cache[log_path] = local_log_dir
@@ -1636,90 +1618,90 @@ def create_config_interface():
                         expected_local_dir = os.path.normpath(expected_local_dir)
                         logger.debug(f"Normalized log directory paths: {local_log_dir}, {expected_local_dir}")
                         
-                        # Ensure local_log_dir is correct (sometimes cache can have invalid path)
-                        if local_log_dir != expected_local_dir and os.path.exists(expected_local_dir):
-                            local_log_dir = expected_local_dir
-                            logger.debug(f"Corrected log directory path to: {local_log_dir}")
-                            # Update cache with corrected path
-                            with tensorboard_logs_cache_lock:
-                                tensorboard_logs_cache[log_path] = local_log_dir
-                        
-                        # Double check the directory exists
-                        if not os.path.exists(local_log_dir):
-                            os.makedirs(local_log_dir, exist_ok=True)
-                            logger.warning(f"Had to recreate log directory: {local_log_dir}")
-                        
-                        # Check if log files actually exist (with more detailed logging)
-                        log_pattern = "events.out.tfevents*"
-                        log_files = list(Path(local_log_dir).glob(log_pattern))
-                        logger.debug(f"Found {len(log_files)} log files matching '{log_pattern}' in {local_log_dir}")
-                        
-                        # If no log files found with glob, try direct directory listing for debugging
-                        if not log_files:
-                            try:
-                                all_files = os.listdir(local_log_dir)
-                                logger.debug(f"Directory contents of {local_log_dir}: {all_files}")
-                                
-                                # Try downloading logs again if directory exists but is empty
-                                if not all_files:
-                                    logger.warning(f"Directory exists but is empty, downloading logs again")
-                                    local_log_dir = download_tensorboard_logs(log_path)
-                                    if local_log_dir:
-                                        # Update cache with refreshed data
-                                        with tensorboard_logs_cache_lock:
-                                            tensorboard_logs_cache[log_path] = local_log_dir
-                            except Exception as e:
-                                logger.error(f"Error listing directory: {str(e)}")
-                        
-                        # Final check for log files
-                        if not log_files:
-                            return f"⚠️ No log files found in directory {local_log_dir}. Try refreshing the folder list."
-                            
-                        logger.info(f"Found {len(log_files)} log files, starting TensorBoard with {local_log_dir}")
-                            
-                        # Stop previous TensorBoard if running
+                        # Stop previous TensorBoard if running (using taskkill on Windows)
                         try:
                             subprocess.run(["taskkill", "/f", "/im", "tensorboard.exe"], 
                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                             logger.info("Stopped previous TensorBoard instance")
-                        except Exception:
-                            pass  # Ignore if no process running
+                        except Exception as e:
+                            logger.warning(f"Error stopping previous TensorBoard: {str(e)}")
+                            # Alternative method for killing processes if taskkill fails
+                            try:
+                                for proc in psutil.process_iter():
+                                    if proc.name().lower() == 'tensorboard.exe':
+                                        proc.kill()
+                                        logger.info(f"Killed TensorBoard process: {proc.pid}")
+                            except Exception as e:
+                                logger.warning(f"Error in alternative process kill: {str(e)}")
+                                
+                        # Double check the directory exists and has log files
+                        log_pattern = "events.out.tfevents*"
+                        log_files = list(Path(local_log_dir).glob(log_pattern))
+                        logger.debug(f"Found {len(log_files)} log files matching '{log_pattern}' in {local_log_dir}")
                         
                         # Start TensorBoard with local path
-                        subprocess.Popen([
-                            "tensorboard",
-                            "--logdir", local_log_dir,
-                            "--port", "6006"
-                        ])
-                        
-                        log_name = os.path.basename(log_path)
-                        folder_name = os.path.dirname(log_path).split("/")[-1]
-                        return f'''
-                        <div style="text-align:center; padding: 10px;">
-                            <p>✅ TensorBoard started with {len(log_files)} log files</p>
-                            <p>📁 Folder: <b>{folder_name}</b> | 📄 Log: <b>{log_name}</b></p>
-                            <a href="http://localhost:6006" target="_blank" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px; margin-top: 10px;">
-                                📊 Open TensorBoard
-                            </a>
-                        </div>
-                        '''
+                        try:
+                            # Start TensorBoard
+                            cmd = ["tensorboard", "--logdir", local_log_dir, "--port", "6006"]
+                            subprocess.Popen(cmd)
+                            logger.info(f"Started TensorBoard with command: {' '.join(cmd)}")
+                            
+                            # Add a small delay to allow TensorBoard to start
+                            time.sleep(1)
+                            
+                            # Use old UI format that user prefers
+                            log_name = os.path.basename(log_path)
+                            folder_name = os.path.dirname(log_path).split("/")[-1]
+                            
+                            return f'''
+                            <div style="text-align:center; padding: 10px;">
+                                <p>✅ TensorBoard started with {len(log_files)} log files</p>
+                                <p>📁 Folder: <b>{folder_name}</b> | 📄 Log: <b>{log_name}</b></p>
+                                <p><small>Updated at: {datetime.now().strftime('%H:%M:%S')}</small></p>
+                                <a href="http://localhost:6006" target="_blank" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px; margin-top: 10px;">
+                                    📊 Open TensorBoard
+                                </a>
+                            </div>
+                            '''
+                        except Exception as e:
+                            logger.error(f"Error starting TensorBoard: {str(e)}")
+                            return f"⚠️ Error: {str(e)}"
                     except Exception as e:
-                        logger.error(f"Error starting TensorBoard: {str(e)}")
+                        logger.error(f"Error in start_tensorboard: {str(e)}")
                         return f"⚠️ Error: {str(e)}"
 
                 def handle_refresh():
                     """Handle refresh button click by forcing reload of folder data"""
-                    updates = update_tb_folders(force_reload=True)
-                    
-                    # Check if log path is None
-                    if updates[2] is None:
+                    try:
+                        # Clear all cache when refresh button is clicked
+                        tensorboard_folders_cache.clear()
+                        with tensorboard_logs_cache_lock:
+                            tensorboard_logs_cache.clear()
+                        
+                        # Create new timestamp to ensure browser cache is bypassed
+                        timestamp = int(time.time())
+                        
+                        # Reload data completely
+                        updates = update_tb_folders(force_reload=True)
+                        
+                        # Check if log path is None
+                        if updates[2] is None:
+                            return [
+                                updates[0],
+                                updates[1],
+                                "⚠️ No TensorBoard log files found. Please check if your training has generated any logs."
+                            ]
+                        
+                        # Ensure latest log file is loaded and start TensorBoard
+                        log_path = updates[2]
+                        return [updates[0], updates[1], start_tensorboard(log_path, force_reload=True)]
+                    except Exception as e:
+                        logger.error(f"Error in handle_refresh: {str(e)}")
                         return [
-                            updates[0],
-                            updates[1],
-                            "⚠️ No TensorBoard log files found. Please check if your training has generated any logs."
+                            gr.update(choices=[], value=None),
+                            gr.update(visible=False),
+                            f"⚠️ Error refreshing data: {str(e)}"
                         ]
-                    
-                    return [updates[0], updates[1], start_tensorboard(updates[2])]
 
                 def on_folder_change(folder: str):
                     """Handle folder selection change by updating log files dropdown
@@ -1734,7 +1716,7 @@ def create_config_interface():
                         return [gr.update(visible=False), None]
                     
                     # Get folders from cache or reload if needed
-                    folders = tensorboard_folders_cache.get("folders", get_tensorboard_folders())
+                    folders = tensorboard_folders_cache.get("folders", get_tensorboard_folders(force_reload=True))
                     selected = next((f for f in folders if f[1] == folder), None)
                     
                     if not selected:
@@ -1744,20 +1726,21 @@ def create_config_interface():
                     log_paths = selected[2]
                     log_choices = [os.path.basename(p) for p in log_paths]
                     
+                    # Clear cache for this folder to ensure fresh data
+                    with tensorboard_logs_cache_lock:
+                        for path in log_paths:
+                            if path in tensorboard_logs_cache:
+                                del tensorboard_logs_cache[path]
+                    
                     if log_paths:
-                        # Pre-download the first log file to speed up subsequent operations
+                        # Force download the first log file to ensure it's fresh
                         first_log = log_paths[0]
                         try:
-                            # Only pre-download if not already in cache
-                            if first_log not in tensorboard_logs_cache:
-                                threading.Thread(
-                                    target=download_tensorboard_logs,
-                                    args=(first_log,),
-                                    daemon=True
-                                ).start()
-                                logger.info(f"Started background download for {first_log}")
+                            # Ensure log is freshly downloaded
+                            download_tensorboard_logs(first_log, force_download=True)
+                            logger.info(f"Force downloaded log for folder change: {first_log}")
                         except Exception as e:
-                            logger.error(f"Error in background download: {str(e)}")
+                            logger.error(f"Error downloading log: {str(e)}")
                     
                     return [
                         gr.update(choices=log_choices, value=log_choices[0] if log_choices else None, visible=len(log_choices) > 1),
@@ -1782,7 +1765,7 @@ def create_config_interface():
                     inputs=folder_dropdown,
                     outputs=[log_dropdown, tb_status]
                 ).then(
-                    fn=start_tensorboard,
+                    fn=lambda log_path: start_tensorboard(log_path, force_reload=True),
                     inputs=tb_status,
                     outputs=tb_status
                 )
@@ -1801,7 +1784,7 @@ def create_config_interface():
                     if not log_name or not folder:
                         return None
                         
-                    folders = tensorboard_folders_cache.get("folders", [])
+                    folders = tensorboard_folders_cache.get("folders", get_tensorboard_folders(force_reload=True))
                     selected = next((f for f in folders if f[1] == folder), None)
                     
                     if not selected or not selected[2]:
@@ -1810,6 +1793,8 @@ def create_config_interface():
                     # Find matching log path
                     for path in selected[2]:
                         if os.path.basename(path) == log_name:
+                            # Force download the new log to ensure freshness
+                            download_tensorboard_logs(path, force_download=True)
                             return path
                             
                     # If no match found, return first log path
@@ -1820,7 +1805,7 @@ def create_config_interface():
                     inputs=[log_dropdown, folder_dropdown],
                     outputs=tb_status
                 ).then(
-                    fn=start_tensorboard,
+                    fn=lambda log_path: start_tensorboard(log_path, force_reload=True),
                     inputs=tb_status,
                     outputs=tb_status
                 )
