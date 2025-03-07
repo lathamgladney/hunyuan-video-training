@@ -632,20 +632,31 @@ def get_training_folders(force_reload: bool = False) -> List[str]:
                 
             folder_name = entry.path.strip("/")
             
-            # Check test_outputs folder
+            # Check test_outputs folder in volume
             try:
                 test_outputs = volume.listdir(f"{folder_name}/test_outputs", recursive=False)
-                media_files = [
+                volume_files = [
                     f for f in test_outputs 
                     if f.path.lower().endswith(('.mp4', '.png', '.webp', '.jpeg', '.jpg'))
                 ]
                 
-                if media_files:  # Only include folders with media files
+                # Check local cache for manual test files
+                local_cache_dir = os.path.join("cache", "test_outputs", folder_name)
+                local_files = []
+                if os.path.exists(local_cache_dir):
+                    for file in os.listdir(local_cache_dir):
+                        if file.lower().endswith(('.mp4', '.png', '.jpg', '.jpeg', '.webp')):
+                            # Only count manual test files from local cache
+                            if '_comfy_manual' in file:
+                                local_files.append(file)
+                
+                total_files = len(volume_files) + len(local_files)
+                if total_files > 0:  # Only include folders with media files
                     # Get dataset name
                     dataset_name = get_dataset_name(folder_name)
                     
                     # Format folder name with file count and dataset
-                    folder_info = f"{folder_name} ({len(media_files)} files) {dataset_name}"
+                    folder_info = f"{folder_name} ({total_files} files) {dataset_name}"
                     folders_with_outputs.append(folder_info)
                     
             except Exception as e:
