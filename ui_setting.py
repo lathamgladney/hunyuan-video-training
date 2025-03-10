@@ -26,7 +26,7 @@ import re
 import subprocess
 import time
 import psutil
-
+# TODO: allow install more custom nodes and models for comfyui workflow
 if not logging.getLogger().hasHandlers():
     configure_logging()
 
@@ -760,7 +760,7 @@ def create_config_interface():
     ) as interface:
         gr.Markdown(
             "# Hunyuan Configuration\n"
-            "Edit and save your training configurations. After saving, use Modal CLI commands for different operations."
+            "Training and Testing LoRA Hunyuan Video Model using gradio UI"
         )
         
         with gr.Tab("Training Settings"):

@@ -80,6 +80,12 @@ These dependencies are listed in the `requirements.txt` file for easy installati
    python ui_setting.py
    ```
 
+8. **Login to Hugging Face:**
+   ```bash
+   huggingface-cli login
+   ```
+   This step is required for downloading files from Hugging Face repositories.
+
 ## 📝 Usage
 
 1. Open the UI by running `python ui_setting.py`
