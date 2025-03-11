@@ -2,6 +2,7 @@
 
 This project extends the training pipeline from [diffusion-pipe](https://github.com/tdrussell/diffusion-pipe) repository, adding Modal cloud integration and enhanced video generation capabilities.
 
+
 ## 🚀 Key Features
 
 - **Cloud-based Training:** Train Hunyuan video models in the cloud using Modal's infrastructure
@@ -10,6 +11,8 @@ This project extends the training pipeline from [diffusion-pipe](https://github.
 - **Tensorboard Support:** Track and visualize training progress
 - **Customizable Configuration:** Adjust training and inference parameters through a user-friendly interface
 - **GPU Acceleration:** Optimized for high-performance GPU training and inference
+
+[![Demo Video](https://img.youtube.com/vi/D2fLRKJToQE/0.jpg)](https://www.youtube.com/watch?v=D2fLRKJToQE)
 
 ## ⚙️ System Requirements
 
