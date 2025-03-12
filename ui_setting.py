@@ -754,6 +754,39 @@ def create_config_interface():
         config[Config.Sections.TRAINING]["dataset_dir"] = get_real_path_from_choice(initial_dataset_dirs[0])
         save_config(config, Config.Files.MODAL)
 
+    # Get models from config
+    models_training = config.get(Config.Sections.MODELS, {}).get("training", {})
+    
+    # Transformer URLs with default fallback
+    transformer_urls = [
+        "https://huggingface.co/Kijai/HunyuanVideo_comfy/blob/main/hunyuan_video_720_cfgdistill_bf16.safetensors",
+        "https://huggingface.co/Kijai/HunyuanVideo_comfy/blob/main/hunyuan_video_720_cfgdistill_fp8_e4m3fn.safetensors"
+    ]
+    current_transformer = models_training.get(
+        "transformer", 
+        transformer_urls[0]  # Fallback if not in config
+    )
+    
+    # VAE URLs with default fallback
+    vae_urls = [
+        "https://huggingface.co/Kijai/HunyuanVideo_comfy/blob/main/hunyuan_video_vae_fp32.safetensors",
+        "https://huggingface.co/Kijai/HunyuanVideo_comfy/blob/main/hunyuan_video_vae_bf16.safetensors"
+    ]
+    current_vae = models_training.get(
+        "vae", 
+        vae_urls[0]  # Fallback if not in config
+    )
+    
+    # CLIP and LLM with values from config or default
+    current_clip = models_training.get(
+        "clip", 
+        "https://huggingface.co/openai/clip-vit-large-patch14/tree/main"
+    )
+    current_llm = models_training.get(
+        "llm", 
+        "https://huggingface.co/Kijai/llava-llama-3-8b-text-encoder-tokenizer/tree/main"
+    )
+
     with gr.Blocks(
         title="Hunyuan Config", 
         css=".tb-dropdown { min-width: 400px !important; margin: 8px 0; } .tb-dropdown .wrap { border: 1px solid #2b3137 !important; } .center-content { text-align: center; margin-top: 20px; }"
@@ -1010,7 +1043,7 @@ def create_config_interface():
                 
                 transformer_path = gr.Dropdown(
                     choices=transformer_urls,
-                    value=transformer_urls[0],
+                    value=current_transformer,
                     label="Transformer Model",
                     info="⚠️ Requires redeploy if changed",
                     interactive=True,
@@ -1018,19 +1051,19 @@ def create_config_interface():
                 )
                 vae_path = gr.Dropdown(
                     choices=vae_urls,
-                    value=vae_urls[0],
+                    value=current_vae,
                     label="VAE Model",
                     info="⚠️ Requires redeploy if changed",
                     interactive=True,
                     allow_custom_value=False
                 )
                 llm_path = gr.Textbox(
-                    value="https://huggingface.co/Kijai/llava-llama-3-8b-text-encoder-tokenizer/tree/main",
+                    value=current_llm,
                     label="LLM Model",
                     interactive=False
                 )
                 clip_path = gr.Textbox(
-                    value="https://huggingface.co/openai/clip-vit-large-patch14/tree/main",
+                    value=current_clip,
                     label="CLIP Model",
                     interactive=False
                 )
